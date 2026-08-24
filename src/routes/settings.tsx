@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ExcelButton } from "@/components/excel-button";
 import { useAppStore } from "@/lib/store";
 import { buildFollowingWeek } from "@/lib/week-utils";
-import { compareJalali } from "@/lib/jalali";
+import { compareJalali, formatJalaliWithWeekday } from "@/lib/jalali";
 import { toast } from "sonner";
 import type { AppState, ClassSettings } from "@/lib/types";
 import { CalendarPlus } from "lucide-react";
@@ -17,6 +17,8 @@ export const Route = createFileRoute("/settings")({ component: SettingsPage });
 function SettingsPage() {
   const settings = useAppStore((s) => s.settings);
   const weeks = useAppStore((s) => s.weeks);
+  const activeWeekId = useAppStore((s) => s.activeWeekId);
+  const setActiveWeek = useAppStore((s) => s.setActiveWeek);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const resetToSeed = useAppStore((s) => s.resetToSeed);
   const addWeek = useAppStore((s) => s.addWeek);
@@ -25,6 +27,22 @@ function SettingsPage() {
 
   const set = (key: keyof ClassSettings, value: string | number) => {
     updateSettings({ [key]: value } as Partial<ClassSettings>);
+  };
+
+  const sortedWeeks = [...weeks].sort((a, b) => compareJalali(a.evalDate, b.evalDate));
+  const last = sortedWeeks.at(-1);
+  const preview = last ? buildFollowingWeek(last) : null;
+
+  const handleAddWeek = () => {
+    if (!last) return;
+    const next = buildFollowingWeek(last);
+    if (weeks.some((w) => w.id === next.id)) {
+      toast.message("این هفته از قبل وجود دارد");
+      setActiveWeek(next.id);
+      return;
+    }
+    addWeek(next);
+    toast.success(`هفته «${next.label}» ساخته شد و فعال شد`);
   };
 
   return (
@@ -84,28 +102,46 @@ function SettingsPage() {
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>هفته‌ها</CardTitle>
+          <CardTitle>هفته‌ها و روزهای جلسه</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <ul className="space-y-1 text-sm">
-            {weeks.map((w) => (
-              <li key={w.id} className="flex justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2">
-                <span>{w.label}</span>
-                <span className="text-muted-foreground">{w.status === "complete" ? "نهایی" : "باز"}</span>
+        <CardContent className="space-y-4">
+          <ul className="space-y-2 text-sm">
+            {sortedWeeks.map((w) => (
+              <li
+                key={w.id}
+                className={`rounded-lg px-3 py-2 ${w.id === activeWeekId ? "bg-primary/10 ring-1 ring-primary/30" : "bg-muted/50"}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <button type="button" className="text-right font-medium hover:underline" onClick={() => setActiveWeek(w.id)}>
+                    {w.label}
+                    {w.id === activeWeekId ? " · فعال" : ""}
+                  </button>
+                  <span className="text-muted-foreground">{w.status === "complete" ? "نهایی" : "باز"}</span>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  روزهای جلسه:{" "}
+                  {w.sessionDates.map((d) => formatJalaliWithWeekday(d)).join(" · ") || "—"}
+                </div>
               </li>
             ))}
           </ul>
-          <Button
-            variant="outline"
-            onClick={() => {
-              const last = [...weeks].sort((a, b) => compareJalali(a.evalDate, b.evalDate)).at(-1);
-              if (!last) return;
-              addWeek(buildFollowingWeek(last));
-              toast.success("هفته بعد ساخته شد و فعال است");
-            }}
-          >
+
+          {preview ? (
+            <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-3 text-sm">
+              <div className="font-medium">پیش‌نمایش هفته بعد</div>
+              <div className="mt-1 text-muted-foreground">{preview.label}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {preview.sessionDates.map((d) => formatJalaliWithWeekday(d)).join(" · ")}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                با ساخت هفته بعد، برای همه دانش‌آموزان ردیف‌های خالی روزانه و فرم ارزیابی هفته ساخته می‌شود و هفته جدید فعال می‌شود.
+              </p>
+            </div>
+          ) : null}
+
+          <Button onClick={handleAddWeek} disabled={!last}>
             <CalendarPlus className="size-4" />
-            ساخت هفته بعد
+            ساخت هفته بعد + روزهای جلسه
           </Button>
         </CardContent>
       </Card>
