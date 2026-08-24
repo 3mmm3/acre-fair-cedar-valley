@@ -1,6 +1,5 @@
-import type { DailyRecord, ScoreKey, Student, WeeklyRecord } from "./types";
+import type { DailyRecord, ScoreKey, Student, Week, WeeklyRecord } from "./types";
 import {
-  ACADEMIC_MAX,
   DISCIPLINE_MAX,
   SCORE_FIELDS,
   academicTotal,
@@ -9,6 +8,7 @@ import {
   fieldPercent,
   mean,
 } from "./scoring";
+import { parseJalali } from "./jalali";
 
 export type CategoryInsight = {
   key: ScoreKey | "discipline"
@@ -29,6 +29,32 @@ export type StudentInsight = {
   focusTitle: string
   paragraphs: string[]
   plan: string[]
+};
+
+export type Period = "week" | "month" | "term";
+
+export type FieldLeader = {
+  key: ScoreKey | "discipline" | "weekTotal"
+  label: string
+  max: number
+  studentId: string | null
+  studentName: string | null
+  shortName: string | null
+  photo: string | null
+  value: number | null
+  percent: number | null
+};
+
+export type TopPerformer = {
+  rank: number
+  studentId: string
+  fullName: string
+  shortName: string
+  photo: string | null
+  weekTotal: number | null
+  dailyAvg: number | null
+  disciplineAvg: number | null
+  isEthicsMan: boolean
 };
 
 function trendOf(values: Array<number | null>): { dir: "up" | "down" | "flat" | "na"; delta: number | null } {
@@ -218,4 +244,159 @@ function joinFa(items: string[]): string {
 
 export function classCategoryAverages(dailies: DailyRecord[]): CategoryInsight[] {
   return categoryInsights(dailies);
+}
+
+/** هفته / ماه (همان ماه شمسی تاریخ ارزیابی) / ترم (همه هفته‌ها) */
+export function weeksInPeriod(weeks: Week[], activeWeekId: string, period: Period): Week[] {
+  const active = weeks.find((w) => w.id === activeWeekId);
+  if (!active) return [];
+  if (period === "week") return [active];
+  if (period === "month") {
+    const { y, m } = parseJalali(active.evalDate);
+    return weeks.filter((w) => {
+      const p = parseJalali(w.evalDate);
+      return p.y === y && p.m === m;
+    });
+  }
+  return [...weeks];
+}
+
+export const PERIOD_LABEL: Record<Period, string> = {
+  week: "هفته",
+  month: "ماه",
+  term: "ترم",
+};
+
+/**
+ * برترین هر فیلد در بازه انتخابی — بر اساس میانگین نمرات حضور در روزهای آن بازه.
+ * برای weekTotal از میانگین نمره ارزیابی هفته‌های داخل بازه استفاده می‌شود.
+ */
+export function fieldLeadersForPeriod(args: {
+  students: Student[]
+  weeks: Week[]
+  dailies: DailyRecord[]
+  weeklies: WeeklyRecord[]
+  activeWeekId: string
+  period: Period
+  weekTotalByStudent: Map<string, number | null>
+}): FieldLeader[] {
+  const { students, weeks, dailies, activeWeekId, period, weekTotalByStudent } = args;
+  const periodWeeks = weeksInPeriod(weeks, activeWeekId, period);
+  const weekIds = new Set(periodWeeks.map((w) => w.id));
+  const presentDays = dailies.filter(
+    (d) => weekIds.has(d.weekId) && (d.attendance === "present" || d.attendance === "late"),
+  );
+
+  const leaders: FieldLeader[] = [];
+
+  for (const f of SCORE_FIELDS) {
+    let bestId: string | null = null;
+    let bestVal: number | null = null;
+    for (const s of students) {
+      const avg = fieldAverage(
+        presentDays.filter((d) => d.studentId === s.id),
+        f.key,
+      );
+      if (avg == null) continue;
+      if (bestVal == null || avg > bestVal) {
+        bestVal = avg;
+        bestId = s.id;
+      }
+    }
+    const st = students.find((x) => x.id === bestId) ?? null;
+    leaders.push({
+      key: f.key,
+      label: f.label,
+      max: f.max,
+      studentId: bestId,
+      studentName: st?.fullName ?? null,
+      shortName: st?.shortName ?? null,
+      photo: st?.photo ?? null,
+      value: bestVal,
+      percent: fieldPercent(bestVal, f.max),
+    });
+  }
+
+  // انضباط
+  {
+    let bestId: string | null = null;
+    let bestVal: number | null = null;
+    for (const s of students) {
+      const avg = mean(presentDays.filter((d) => d.studentId === s.id).map((d) => d.discipline));
+      if (avg == null) continue;
+      if (bestVal == null || avg > bestVal) {
+        bestVal = avg;
+        bestId = s.id;
+      }
+    }
+    const st = students.find((x) => x.id === bestId) ?? null;
+    leaders.push({
+      key: "discipline",
+      label: "انضباط",
+      max: DISCIPLINE_MAX,
+      studentId: bestId,
+      studentName: st?.fullName ?? null,
+      shortName: st?.shortName ?? null,
+      photo: st?.photo ?? null,
+      value: bestVal,
+      percent: fieldPercent(bestVal, DISCIPLINE_MAX),
+    });
+  }
+
+  // نمره کل ارزیابی هفته
+  {
+    let bestId: string | null = null;
+    let bestVal: number | null = null;
+    for (const s of students) {
+      // برای هفته: همان weekTotal؛ برای ماه/ترم: میانگین weekTotalهای موجود در map (فراخوان‌کننده پر می‌کند)
+      const v = weekTotalByStudent.get(s.id) ?? null;
+      if (v == null) continue;
+      if (bestVal == null || v > bestVal) {
+        bestVal = v;
+        bestId = s.id;
+      }
+    }
+    const st = students.find((x) => x.id === bestId) ?? null;
+    leaders.push({
+      key: "weekTotal",
+      label: "نمره کل ارزیابی",
+      max: 100,
+      studentId: bestId,
+      studentName: st?.fullName ?? null,
+      shortName: st?.shortName ?? null,
+      photo: st?.photo ?? null,
+      value: bestVal,
+      percent: fieldPercent(bestVal, 100),
+    });
+  }
+
+  return leaders;
+}
+
+/** سه نفر برتر هفته فعال بر اساس نمره ارزیابی کل */
+export function topPerformersOfWeek(
+  rows: Array<{
+    student: Student
+    weekTotal: number | null
+    dailyAvg: number | null
+    disciplineAvg: number | null
+    isEthicsMan: boolean
+  }>,
+  limit = 3,
+): TopPerformer[] {
+  return [...rows]
+    .filter((r) => r.weekTotal != null)
+    .sort((a, b) => (b.weekTotal ?? -1) - (a.weekTotal ?? -1))
+    .slice(0, limit)
+    .map((r, i) => ({
+      rank: i + 1,
+      studentId: r.student.id,
+      fullName: r.student.fullName,
+      shortName: r.student.shortName,
+      photo: r.student.photo,
+      weekTotal: r.weekTotal,
+      dailyAvg: r.dailyAvg,
+      disciplineAvg: r.disciplineAvg,
+      isEthicsMan: r.isEthicsMan,
+    }));
 }
