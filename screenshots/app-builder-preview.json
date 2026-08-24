@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "میقات — سامانه ارزیابی حافظان قرآن",
+      "hasCanvas": false,
+      "bodyTextLen": 1540,
+      "bodyTextHash": "47775fa0915447339fd65079d9a77afbd25a87a4fa8b961c57a384662ff01b68",
+      "bodyTextPrefix": "میقات ارزیابی حافظان داشبورد پرونده‌ها ثبت روزانه ارزیابی هفته ت",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "میقات — سامانه ارزیابی حافظان قرآن",
+      "hasCanvas": false,
+      "bodyTextLen": 1121,
+      "bodyTextHash": "bfcc8ee052cd039c921038fe9834fc30c1500fc29eb7bfc27a8a2ad2d723ac03",
+      "bodyTextPrefix": "میقات هفته ۸ مرداد ۱۴۰۵ هفته ۱۵ مرداد ۱۴۰۵ هفته ۲۲ مرداد ۱۴۰۵ هف",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

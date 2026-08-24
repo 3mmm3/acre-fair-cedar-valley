@@ -1,0 +1,195 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useRef } from "react";
+import { AppShell } from "@/components/layout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ExcelButton } from "@/components/excel-button";
+import { useAppStore } from "@/lib/store";
+import { buildFollowingWeek } from "@/lib/week-utils";
+import { compareJalali } from "@/lib/jalali";
+import { toast } from "sonner";
+import type { AppState, ClassSettings } from "@/lib/types";
+import { CalendarPlus } from "lucide-react";
+
+export const Route = createFileRoute("/settings")({ component: SettingsPage });
+
+function SettingsPage() {
+  const settings = useAppStore((s) => s.settings);
+  const weeks = useAppStore((s) => s.weeks);
+  const updateSettings = useAppStore((s) => s.updateSettings);
+  const resetToSeed = useAppStore((s) => s.resetToSeed);
+  const addWeek = useAppStore((s) => s.addWeek);
+  const loadBackup = useAppStore((s) => s.loadBackup);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const set = (key: keyof ClassSettings, value: string | number) => {
+    updateSettings({ [key]: value } as Partial<ClassSettings>);
+  };
+
+  return (
+    <AppShell>
+      <h1 className="font-display text-3xl font-bold">تنظیمات کلاس</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        نام مؤسسه، آستانه‌های سطح و قوانین امتیاز — محاسبات بلافاصله با این اعداد هماهنگ می‌شوند
+      </p>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>مشخصات</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Field label="مؤسسه" value={settings.institution} onChange={(v) => set("institution", v)} />
+            <Field label="نام کلاس" value={settings.className} onChange={(v) => set("className", v)} />
+            <Field label="نام مربی" value={settings.teacherName} onChange={(v) => set("teacherName", v)} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>آستانه سطح</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Num label="سطح الف از نمره" value={settings.levelA} onChange={(v) => set("levelA", v)} />
+            <Num label="سطح ب از نمره" value={settings.levelB} onChange={(v) => set("levelB", v)} />
+            <p className="text-xs text-muted-foreground">پایین‌تر از سطح ب، سطح ج محسوب می‌شود.</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>امتیاز عملکرد</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Num label="امتیاز نمره سطح الف" value={settings.pointsHigh} onChange={(v) => set("pointsHigh", v)} />
+            <Num label="امتیاز نمره سطح ب" value={settings.pointsMid} onChange={(v) => set("pointsMid", v)} />
+            <Num label="امتیاز نمره ۶۵ به بالا" value={settings.pointsLow} onChange={(v) => set("pointsLow", v)} />
+            <Num label="پاداش مرد اخلاق" value={settings.ethicsBonus} onChange={(v) => set("ethicsBonus", v)} />
+            <Num label="پاداش ارتقاء سطح" value={settings.promotionBonus} onChange={(v) => set("promotionBonus", v)} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>کارت‌ها</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Num label="برنزی از" value={settings.bronzeAt} onChange={(v) => set("bronzeAt", v)} />
+            <Num label="نقره‌ای از" value={settings.silverAt} onChange={(v) => set("silverAt", v)} />
+            <Num label="طلایی از" value={settings.goldAt} onChange={(v) => set("goldAt", v)} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>هفته‌ها</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <ul className="space-y-1 text-sm">
+            {weeks.map((w) => (
+              <li key={w.id} className="flex justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2">
+                <span>{w.label}</span>
+                <span className="text-muted-foreground">{w.status === "complete" ? "نهایی" : "باز"}</span>
+              </li>
+            ))}
+          </ul>
+          <Button
+            variant="outline"
+            onClick={() => {
+              const last = [...weeks].sort((a, b) => compareJalali(a.evalDate, b.evalDate)).at(-1);
+              if (!last) return;
+              addWeek(buildFollowingWeek(last));
+              toast.success("هفته بعد ساخته شد و فعال است");
+            }}
+          >
+            <CalendarPlus className="size-4" />
+            ساخت هفته بعد
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>خروجی و پشتیبان</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <ExcelButton variant="default" />
+          <Button
+            variant="outline"
+            onClick={() => {
+              const blob = {
+                students: useAppStore.getState().students,
+                weeks: useAppStore.getState().weeks,
+                dailies: useAppStore.getState().dailies,
+                weeklies: useAppStore.getState().weeklies,
+                points: useAppStore.getState().points,
+                settings: useAppStore.getState().settings,
+                activeWeekId: useAppStore.getState().activeWeekId,
+              };
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(new Blob([JSON.stringify(blob, null, 2)], { type: "application/json" }));
+              a.download = "miqat-backup.json";
+              a.click();
+              toast.success("نسخه پشتیبان دانلود شد");
+            }}
+          >
+            خروجی JSON
+          </Button>
+          <Button variant="outline" onClick={() => fileRef.current?.click()}>
+            بازیابی از JSON
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              try {
+                const data = JSON.parse(await file.text()) as Partial<AppState>;
+                if (!Array.isArray(data.students)) throw new Error("invalid");
+                loadBackup(data);
+                toast.success("پشتیبان بازیابی شد");
+              } catch {
+                toast.error("این فایل پشتیبان معتبر نیست");
+              }
+              e.target.value = "";
+            }}
+          />
+          <Button
+            variant="destructive"
+            onClick={() => {
+              if (confirm("همه تغییرات پاک شود و داده‌های نمونه هفته ۲۲ مرداد برگردد؟")) {
+                resetToSeed();
+                toast.success("داده‌ها به حالت اولیه برگشت");
+              }
+            }}
+          >
+            بازگشت به داده نمونه
+          </Button>
+        </CardContent>
+      </Card>
+    </AppShell>
+  );
+}
+
+function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs text-muted-foreground">{label}</label>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function Num({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs text-muted-foreground">{label}</label>
+      <Input type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </div>
+  );
+}
