@@ -10,7 +10,7 @@ import type {
   WeeklyRecord,
 } from "./types";
 import { createSeedState, SEED_VERSION } from "./seed";
-import { computeWeekly, performancePoints, EMPTY_SCORES } from "./scoring";
+import { computeWeekly, performancePoints, absencePenalty, EMPTY_SCORES } from "./scoring";
 import { compareJalali } from "./jalali";
 
 type Actions = {
@@ -173,9 +173,20 @@ export const useAppStore = create<AppState & Actions>()(
           const weekly = weeklies.find((w) => w.studentId === s.id && w.weekId === weekId);
           const computed = computeWeekly(days, weekly, prevLevel, settings);
           const isEthics = computed.disciplineAvg != null && computed.disciplineAvg === maxDisc && maxDisc > 0;
+
+          // امتیاز پایه عملکرد
           let awarded = performancePoints(computed.weekTotal, settings);
           if (isEthics) awarded += settings.ethicsBonus;
           if (computed.change === "promote") awarded += settings.promotionBonus;
+
+          // کارت هفتگی (دکتر میربلوک)
+          if (computed.card) {
+            awarded += computed.card.points;
+          }
+
+          // جریمه غیبت
+          const penalty = absencePenalty(computed.nonExcused, computed.excused);
+          awarded -= penalty;
 
           weeklies = weeklies.map((w) =>
             w.studentId === s.id && w.weekId === weekId
@@ -191,24 +202,30 @@ export const useAppStore = create<AppState & Actions>()(
           );
           students = students.map((st) =>
             st.id === s.id
-              ? { ...st, currentLevel: computed.nextLevel, totalPoints: st.totalPoints + awarded }
+              ? {
+                  ...st,
+                  currentLevel: computed.nextLevel,
+                  totalPoints: Math.max(0, st.totalPoints + awarded),
+                }
               : st,
           );
-          if (awarded > 0) {
+
+          // ثبت رویدادها
+          const reasonParts: string[] = ["عملکرد هفته"];
+          if (isEthics) reasonParts.push("مرد اخلاق");
+          if (computed.change === "promote") reasonParts.push("ارتقاء");
+          if (computed.card) reasonParts.push(`کارت ${computed.card.label}`);
+          if (penalty > 0) reasonParts.push(`جریمه غیبت (-${penalty})`);
+
+          if (awarded !== 0 || penalty > 0 || computed.card) {
             points.push({
               id: `p-${s.id}-${weekId}-${Date.now()}`,
               studentId: s.id,
               weekId,
               date: week.evalDate,
               amount: awarded,
-              reason: isEthics
-                ? computed.change === "promote"
-                  ? "عملکرد هفته + مرد اخلاق + ارتقاء"
-                  : "عملکرد هفته + مرد اخلاق"
-                : computed.change === "promote"
-                  ? "عملکرد هفته + ارتقاء"
-                  : "عملکرد هفته",
-              kind: isEthics ? "ethics" : computed.change === "promote" ? "promotion" : "weekly",
+              reason: reasonParts.join(" + "),
+              kind: computed.card ? "card" : isEthics ? "ethics" : computed.change === "promote" ? "promotion" : "weekly",
             });
           }
         }
