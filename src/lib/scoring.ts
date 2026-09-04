@@ -12,16 +12,16 @@ import type {
 
 export const DISCIPLINE_MAX = 60;
 
-export const SCORE_FIELDS: Array<{ key: ScoreKey; label: string; max: number }> = [
-  { key: "reading1", label: "خواندنی ۱", max: 20 },
-  { key: "reading2", label: "خواندنی ۲", max: 20 },
-  { key: "pageNumber", label: "شماره صفحه", max: 10 },
-  { key: "verseNumber", label: "شماره آیه", max: 10 },
-  { key: "phraseRecognition", label: "تشخیص عبارت", max: 10 },
-  { key: "verseOrder", label: "ترتیب آیه", max: 10 },
-  { key: "pageOrder", label: "ترتیب صفحه", max: 10 },
-  { key: "firstLastVerse", label: "اول و آخر آیه", max: 10 },
-  { key: "counting", label: "شمارشی", max: 10 },
+export const SCORE_FIELDS: Array<{ key: ScoreKey; label: string; short: string; max: number }> = [
+  { key: "reading1", label: "خواندنی ۱", short: "خ۱", max: 20 },
+  { key: "reading2", label: "خواندنی ۲", short: "خ۲", max: 20 },
+  { key: "pageNumber", label: "شماره صفحه", short: "صفحه", max: 10 },
+  { key: "verseNumber", label: "شماره آیه", short: "آیه", max: 10 },
+  { key: "phraseRecognition", label: "تشخیص عبارت", short: "عبارت", max: 10 },
+  { key: "verseOrder", label: "ترتیب آیه", short: "ترتیب‌آ", max: 10 },
+  { key: "pageOrder", label: "ترتیب صفحه", short: "ترتیب‌ص", max: 10 },
+  { key: "firstLastVerse", label: "اول و آخر آیه", short: "اول‌آخر", max: 10 },
+  { key: "counting", label: "شمارشی", short: "شمارش", max: 10 },
 ];
 
 export const EMPTY_SCORES: ScoreMap = {
@@ -34,6 +34,13 @@ export const EMPTY_SCORES: ScoreMap = {
   pageOrder: null,
   firstLastVerse: null,
   counting: null,
+};
+
+export const ATTENDANCE_LABEL: Record<Attendance, string> = {
+  present: "حاضر",
+  late: "تأخیر",
+  excused: "موجه",
+  absent: "غایب",
 };
 
 export function mean(values: Array<number | null | undefined>): number | null {
@@ -53,7 +60,6 @@ export function dailyAverage(academic: number | null, discipline: number | null)
   if (academic == null && discipline == null) return null;
   const a = academic ?? 0;
   const d = discipline ?? 0;
-  // میانگین روز = (نمره علمی + انضباط) / 2  → سقف حدود ۱۰۰
   return Math.round(((a + d) / 2) * 10) / 10;
 }
 
@@ -66,7 +72,6 @@ export function fieldPercent(avg: number | null, max: number): number | null {
   return Math.round((avg / max) * 1000) / 10;
 }
 
-/** کارت بر اساس امتیاز کل انباشته (تنظیمات کلاس) */
 export type CardType = "gold" | "silver" | "bronze";
 
 export const CARD_LABEL: Record<CardType, string> = {
@@ -83,9 +88,9 @@ export function cardForPoints(totalPoints: number, settings: ClassSettings): Car
 }
 
 /**
- * کارت هفتگی طبق قوانین دکتر میربلوک (بر اساس نمره ارزیابی هفته + سطح فعلی)
+ * کارت هفتگی طبق قوانین دکتر میربلوک
  * حد نصاب مشترک: طلایی ۹۰+ | نقره‌ای ۸۵–۸۹ | برنزی ۸۱–۸۴
- * امتیاز کارت بسته به سطح A/B/C متفاوت است.
+ * امتیاز کارت بسته به سطح A/B/C
  */
 export function weeklyCardForScore(
   weekTotal: number | null,
@@ -110,7 +115,6 @@ export function weeklyCardForScore(
   };
 }
 
-/** امتیاز عملکرد هفته بر اساس نمره کل (تنظیمات کلاس) */
 export function performancePoints(weekTotal: number | null, settings: ClassSettings): number {
   if (weekTotal == null) return 0;
   if (weekTotal >= settings.levelA) return settings.pointsHigh;
@@ -118,9 +122,10 @@ export function performancePoints(weekTotal: number | null, settings: ClassSetti
   return settings.pointsLow;
 }
 
-/**
- * محاسبه کامل هفته برای یک دانش‌آموز
- */
+export function absencePenalty(nonExcused: number, excused: number): number {
+  return nonExcused * 1000 + excused * 500;
+}
+
 export function computeWeekly(
   days: DailyRecord[],
   weekly: WeeklyRecord | undefined,
@@ -136,16 +141,19 @@ export function computeWeekly(
   const disciplineAvg = mean(disciplineAvgs);
   const dailyAvg = mean(dailyAvgs);
 
-  // نمره ارزیابی هفته = میانگین روز + نیمی از آزمون شفاهی و کتبی (هر کدام از ۵۰)
+  const oralExam = weekly?.oralExam ?? null;
+  const writtenExam = weekly?.writtenExam ?? null;
+  const examTotal =
+    oralExam != null || writtenExam != null ? (oralExam ?? 0) + (writtenExam ?? 0) : null;
+
   let weekTotal: number | null = null;
-  if (dailyAvg != null || weekly?.oralExam != null || weekly?.writtenExam != null) {
-    const oral = weekly?.oralExam ?? 0;
-    const written = weekly?.writtenExam ?? 0;
+  if (dailyAvg != null || oralExam != null || writtenExam != null) {
+    const oral = oralExam ?? 0;
+    const written = writtenExam ?? 0;
     const base = dailyAvg ?? 0;
     weekTotal = Math.round((base * 0.6 + (oral + written) * 0.4) * 10) / 10;
   }
 
-  // سطح بعدی
   let nextLevel: Level = prevLevel;
   let change: LevelChange = "stay";
   if (weekTotal != null) {
@@ -162,24 +170,28 @@ export function computeWeekly(
     }
   }
 
-  // کارت هفتگی طبق قوانین جدید
   const card = weeklyCardForScore(weekTotal, prevLevel);
 
-  // شمارش روزهای ضعیف (نمره روز زیر ۷۰)
   const lowDays = presentDays.filter((d) => {
     const avg = dailyAverage(academicTotal(d.scores), d.discipline);
     return avg != null && avg < 70;
   }).length;
 
-  // غیبت‌ها
   const nonExcused = days.filter((d) => d.attendance === "absent").length;
   const excused = days.filter((d) => d.attendance === "excused").length;
+  const presentCount = presentDays.length;
+  const excusedCount = excused;
 
   return {
     academicAvg,
     disciplineAvg,
     dailyAvg,
     weekTotal,
+    oralExam,
+    writtenExam,
+    examTotal,
+    presentCount,
+    excusedCount,
     nextLevel,
     change,
     card,
@@ -188,9 +200,4 @@ export function computeWeekly(
     excused,
     suspended: lowDays >= 2,
   };
-}
-
-/** جریمه امتیاز بابت غیبت (طبق دستور دکتر میربلوک) */
-export function absencePenalty(nonExcused: number, excused: number): number {
-  return nonExcused * 1000 + excused * 500;
 }
