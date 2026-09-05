@@ -12,6 +12,12 @@ import type {
 
 export const DISCIPLINE_MAX = 60;
 
+export const LEVEL_LABEL: Record<Level, string> = {
+  A: "سطح الف",
+  B: "سطح ب",
+  C: "سطح ج",
+};
+
 export const SCORE_FIELDS: Array<{ key: ScoreKey; label: string; short: string; max: number }> = [
   { key: "reading1", label: "خواندنی ۱", short: "خ۱", max: 20 },
   { key: "reading2", label: "خواندنی ۲", short: "خ۲", max: 20 },
@@ -87,11 +93,6 @@ export function cardForPoints(totalPoints: number, settings: ClassSettings): Car
   return null;
 }
 
-/**
- * کارت هفتگی طبق قوانین دکتر میربلوک
- * حد نصاب مشترک: طلایی ۹۰+ | نقره‌ای ۸۵–۸۹ | برنزی ۸۱–۸۴
- * امتیاز کارت بسته به سطح A/B/C
- */
 export function weeklyCardForScore(
   weekTotal: number | null,
   level: Level,
